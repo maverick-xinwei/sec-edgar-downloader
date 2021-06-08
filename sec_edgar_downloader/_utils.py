@@ -77,8 +77,8 @@ def form_request_payload(
         "dateRange": "custom",
         "startdt": start_date,
         "enddt": end_date,
-        "entityName": ticker_or_cik,
-        "forms": filing_types,
+        ##"entityName": ticker_or_cik,
+        ##"forms": filing_types,
         "from": start_index,
         "q": query,
     }
@@ -143,6 +143,7 @@ def get_filing_urls_to_download(
     client = requests.Session()
     client.mount("http://", HTTPAdapter(max_retries=retries))
     client.mount("https://", HTTPAdapter(max_retries=retries))
+
     try:
         while len(filings_to_fetch) < num_filings_to_download:
             payload = form_request_payload(
@@ -178,7 +179,11 @@ def get_filing_urls_to_download(
                         f"Request payload:\n{payload}"
                     )
 
-            query_hits = search_query_results["hits"]["hits"]
+            try:
+                query_hits = search_query_results["hits"]["hits"]
+            except KeyError:
+                print(search_query_results)
+                raise EdgarSearchApiError("Got a key error")
 
             # No more results to process
             if not query_hits:
@@ -193,7 +198,8 @@ def get_filing_urls_to_download(
 
                 # Work around bug where incorrect filings are sometimes included.
                 # For example, AAPL 8-K searches include N-Q entries.
-                if not is_amend and hit_filing_type != filing_type:
+                ## xinxu01 if filing_type is None, we want to collect all filings
+                if not is_amend and hit_filing_type != filing_type and filing_type is not None:
                     continue
 
                 metadata = build_filing_metadata_from_hit(hit)
@@ -249,6 +255,10 @@ def download_and_save_filing(
     if resolve_urls and Path(save_filename).suffix == ".html":
         base_url = f"{download_url.rsplit('/', 1)[0]}/"
         filing_text = resolve_relative_urls_in_filing(filing_text, base_url)
+
+    ## xinxu01: If filing type is None, replace it by 'ALL_FILING' so we can have a legal path string
+    if filing_type is None:
+      filing_type = 'ALL_FILING'
 
     # Create all parent directories as needed and write content to file
     save_path = (
@@ -316,4 +326,10 @@ def download_filings(
 
 
 def get_number_of_unique_filings(filings: List[FilingMetadata]) -> int:
+    ## xinxu01 accession_number = []
+    ## xinxu01 for metadata in filings:
+    ## xinxu01   if metadata.accession_number not in accession_number:
+    ## xinxu01     accession_number.append(metadata.accession_number)
+    ## xinxu01   else:
+    ## xinxu01     print("Duplicated file number: ", metadata.accession_number)
     return len({metadata.accession_number for metadata in filings})

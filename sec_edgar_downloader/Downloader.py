@@ -53,6 +53,7 @@ class Downloader:
         include_amends: bool = False,
         download_details: bool = True,
         query: str = "",
+        dry_run: bool=False
     ) -> int:
         """Download filings and save them to disk.
 
@@ -146,7 +147,10 @@ class Downloader:
                 "Please enter an after date that is less than the before date."
             )
 
-        if filing not in _SUPPORTED_FILINGS:
+        ## if filing is None, we collect all filings
+        if filing is None:
+            filing_options = self.supported_filings
+        elif filing not in _SUPPORTED_FILINGS:
             filing_options = ", ".join(self.supported_filings)
             raise ValueError(
                 f"'{filing}' filings are not supported. "
@@ -165,14 +169,18 @@ class Downloader:
             include_amends,
             query,
         )
+        print("Downloading {} unique files (sequentially)...".format(get_number_of_unique_filings(filings_to_fetch)))
 
-        download_filings(
-            self.download_folder,
-            ticker_or_cik,
-            filing,
-            filings_to_fetch,
-            download_details,
-        )
+        if dry_run:
+          print("I am dry-running , so will not download anything !")
+        else:
+          download_filings(
+              self.download_folder,
+              ticker_or_cik,
+              filing,
+              filings_to_fetch,
+              download_details,
+          )
 
         # Get number of unique accession numbers downloaded
         return get_number_of_unique_filings(filings_to_fetch)
