@@ -37,6 +37,7 @@ FilingMetadata = namedtuple(
         "full_submission_url",
         "filing_details_url",
         "filing_details_filename",
+        "cik_name",
     ],
 )
 
@@ -91,6 +92,7 @@ def build_filing_metadata_from_hit(hit: dict) -> FilingMetadata:
     # the CIKs of executives carrying out insider transactions like in form 4.
     cik = hit["_source"]["ciks"][-1]
     accession_number_no_dashes = accession_number.replace("-", "", 2)
+    ####print("access: {} cik: {}".format(accession_number, cik))
 
     submission_base_url = (
         f"{SEC_EDGAR_ARCHIVES_BASE_URL}/{cik}/{accession_number_no_dashes}"
@@ -125,6 +127,7 @@ def build_filing_metadata_from_hit(hit: dict) -> FilingMetadata:
         full_submission_url=full_submission_url,
         filing_details_url=filing_details_url,
         filing_details_filename=filing_details_filename,
+        cik_name = cik,
     )
 
 
@@ -181,9 +184,13 @@ def get_filing_urls_to_download(
 
             try:
                 query_hits = search_query_results["hits"]["hits"]
-            except KeyError:
-                print(search_query_results)
-                raise EdgarSearchApiError("Got a key error")
+            except any:
+                if search_query_results is None:
+                  pass
+                else:
+                  print(search_query_results)
+                  raise EdgarSearchApiError("Got a key error")
+
 
             # No more results to process
             if not query_hits:
@@ -241,6 +248,7 @@ def download_and_save_filing(
     download_folder: Path,
     ticker_or_cik: str,
     accession_number: str,
+    cik: str,
     filing_type: str,
     download_url: str,
     save_filename: str,
@@ -266,7 +274,7 @@ def download_and_save_filing(
         / ROOT_SAVE_FOLDER_NAME
         / ticker_or_cik
         / filing_type
-        / accession_number
+        / "{}_{}".format(accession_number,cik)
         / save_filename
     )
     save_path.parent.mkdir(parents=True, exist_ok=True)
@@ -294,6 +302,7 @@ def download_filings(
                     download_folder,
                     ticker_or_cik,
                     filing.accession_number,
+                    filing.cik_name,
                     filing_type,
                     filing.full_submission_url,
                     FILING_FULL_SUBMISSION_FILENAME,
@@ -311,6 +320,7 @@ def download_filings(
                         download_folder,
                         ticker_or_cik,
                         filing.accession_number,
+                        filing.cik_name,
                         filing_type,
                         filing.filing_details_url,
                         filing.filing_details_filename,
