@@ -24,6 +24,10 @@ from ._constants import (
     SEC_EDGAR_SEARCH_API_ENDPOINT,
 )
 
+import os
+import re
+import xlsxwriter
+
 
 class EdgarSearchApiError(Exception):
     """Error raised when Edgar Search API encounters a problem."""
@@ -38,6 +42,12 @@ FilingMetadata = namedtuple(
         "filing_details_url",
         "filing_details_filename",
         "cik_name",
+        "excel_root_form",
+        "excel_file_type",
+        "excel_display_names",
+        "excel_file_date",
+        "excel_period_ending",
+        "excel_inc_states",
     ],
 )
 
@@ -92,7 +102,6 @@ def build_filing_metadata_from_hit(hit: dict) -> FilingMetadata:
     # the CIKs of executives carrying out insider transactions like in form 4.
     cik = hit["_source"]["ciks"][-1]
     accession_number_no_dashes = accession_number.replace("-", "", 2)
-    ####print("access: {} cik: {}".format(accession_number, cik))
 
     submission_base_url = (
         f"{SEC_EDGAR_ARCHIVES_BASE_URL}/{cik}/{accession_number_no_dashes}"
@@ -128,7 +137,53 @@ def build_filing_metadata_from_hit(hit: dict) -> FilingMetadata:
         filing_details_url=filing_details_url,
         filing_details_filename=filing_details_filename,
         cik_name = cik,
+        excel_root_form = hit['_source']['root_form'],
+        excel_file_type = hit['_source']['file_type'],
+        excel_display_names = hit['_source']['display_names'],
+        excel_file_date = hit['_source']['file_date'],
+        excel_period_ending = hit['_source']['period_ending'],
+        excel_inc_states = hit['_source']['inc_states'],
     )
+
+def write_to_excel (metas: List[FilingMetadata], write_folder):
+  xls_result_file_name = "search_result.xlsx"
+  xls_result_file_full_name = os.path.join(write_folder, xls_result_file_name)
+
+  xls_fields = ['Form', 'Filed', 'Reporting for', 'Filing entity', 'CIK', 'Incorporated']
+
+  xls_rows = []
+  for meta in metas:
+    xls = {}
+    xls['Form'] = "{} {}".format(meta.excel_root_form, meta.excel_file_type) if meta.excel_root_form != meta.excel_file_type else  (meta.excel_root_form)
+    xls['Filed'] = "{}".format(meta.excel_file_date)
+    xls['Reporting for'] = "" if meta.excel_period_ending is None else "{}".format(meta.excel_period_ending)
+    xls['Filing entity'] = "\n".join([(lambda x: re.sub(r'\s+\(.*\)', '', x))(i) for i in meta.excel_display_names])
+    xls['CIK'] = "\n".join([(lambda x: re.sub(r'.*\((CIK.*)\)', r'\1', x))(i) for i in meta.excel_display_names])
+    xls['Incorporateded'] = "\n".join(meta.excel_inc_states)
+
+    xls_rows.append(xls)
+
+  workbook = xlsxwriter.Workbook(xls_result_file_full_name)
+  cell_format = workbook.add_format({'text_wrap': True})
+  worksheet = workbook.add_worksheet()
+
+
+  for col in range(len(xls_fields)):
+    worksheet.set_column(0, col, 30)
+    worksheet.write(0, col, xls_fields[col])
+
+  ## long space for filing entity
+  #worksheet.set_column(0, 3, 30)
+
+  for row in range(len(xls_rows)):
+    for col in range(len(xls_rows[row].keys())):
+      #print(xls_rows[row][list(xls_rows[row].keys())[col]])
+      worksheet.write(row+1, col, xls_rows[row][list(xls_rows[row].keys())[col]])
+    #print("=================\n")
+
+  workbook.close()
+
+
 
 
 def get_filing_urls_to_download(
@@ -191,6 +246,8 @@ def get_filing_urls_to_download(
                   print(search_query_results)
                   raise EdgarSearchApiError("Got a key error")
 
+            #xinxu01 [print(hit, "\n") for hit  in query_hits]
+
 
             # No more results to process
             if not query_hits:
@@ -210,6 +267,7 @@ def get_filing_urls_to_download(
                     continue
 
                 metadata = build_filing_metadata_from_hit(hit)
+                ## Write to a CSV file with certain informations
                 filings_to_fetch.append(metadata)
 
                 if len(filings_to_fetch) == num_filings_to_download:
@@ -226,7 +284,6 @@ def get_filing_urls_to_download(
         client.close()
 
     return filings_to_fetch
-
 
 def resolve_relative_urls_in_filing(filing_text: str, base_url: str) -> str:
     soup = BeautifulSoup(filing_text, "lxml")

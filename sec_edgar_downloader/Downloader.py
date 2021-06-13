@@ -11,6 +11,7 @@ from ._utils import (
     get_filing_urls_to_download,
     get_number_of_unique_filings,
     validate_date_format,
+    write_to_excel,
 )
 
 
@@ -169,6 +170,9 @@ class Downloader:
             include_amends,
             query,
         )
+
+        write_to_excel(filings_to_fetch, self.download_folder)
+
         print("Downloading {} unique files (sequentially)...".format(get_number_of_unique_filings(filings_to_fetch)))
 
         if dry_run:
